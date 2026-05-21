@@ -39,9 +39,11 @@ export async function resolve(specifier, context, next) {
     'conditions',
     'importAttributes',
     'parentURL',
+    'requestType',
     'importAssertions',
   ]);
   assert.ok(Array.isArray(context.conditions));
+  assert.strictEqual(context.requestType, 'import');
   assert.strictEqual(typeof next, 'function');
 
   const returnValue = {
@@ -73,13 +75,18 @@ export async function load(url, context, next) {
   }
 
   assert.ok(new URL(url));
-  // Ensure `context` has all and only the properties it's supposed to
+  // Ensure `context` has all and only the properties it's supposed to.
+  // requestType and conditions are set by the load step; importAssertions is the deprecated alias.
   assert.deepStrictEqual(Reflect.ownKeys(context), [
     'format',
     'importAttributes',
+    'requestType',
+    'conditions',
     'importAssertions',
   ]);
   assert.strictEqual(context.format, 'test');
+  assert.strictEqual(context.requestType, 'import');
+  assert.ok(Array.isArray(context.conditions));
   assert.strictEqual(typeof next, 'function');
 
   const returnValue = {

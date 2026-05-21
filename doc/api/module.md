@@ -882,11 +882,19 @@ changes:
 
 * `specifier` {string}
 * `context` {Object}
-  * `conditions` {string\[]} Export conditions of the relevant `package.json`
+  * `conditions` {string\[]} Export conditions of the relevant `package.json`.
+    When `requestType` is `'require'`, the array contains CJS conditions
+    (including `'require'`); otherwise it contains ESM conditions
+    (including `'import'`).
   * `importAttributes` {Object} An object whose key-value pairs represent the
     attributes for the module to import
   * `parentURL` {string|undefined} The module importing this one, or undefined
     if this is the Node.js entry point
+  * `requestType` {string} `'import'` if this resolution is on behalf of an
+    `import` statement, `import()` expression, or `import.meta.resolve()`;
+    `'require'` if it is on behalf of a `require()` call (including
+    `require()` in a CommonJS module reached via the [`require(esm)`][]
+    bridge).
 * `nextResolve` {Function} The subsequent `resolve` hook in the chain, or the
   Node.js default `resolve` hook after the last user-supplied `resolve` hook
   * `specifier` {string}
@@ -970,11 +978,18 @@ changes:
 
 * `url` {string} The URL returned by the `resolve` chain
 * `context` {Object}
-  * `conditions` {string\[]} Export conditions of the relevant `package.json`
+  * `conditions` {string\[]} Export conditions of the relevant `package.json`.
+    When `requestType` is `'require'`, the array contains CJS conditions
+    (including `'require'`); otherwise it contains ESM conditions
+    (including `'import'`).
   * `format` {string|null|undefined} The format optionally supplied by the
     `resolve` hook chain. This can be any string value as an input; input values do not need to
     conform to the list of acceptable return values described below.
   * `importAttributes` {Object}
+  * `requestType` {string} `'import'` if this load is on behalf of an `import`
+    statement or `import()` expression; `'require'` if it is on behalf of a
+    `require()` call (including `require()` in a CommonJS module reached via
+    the [`require(esm)`][] bridge).
 * `nextLoad` {Function} The subsequent `load` hook in the chain, or the
   Node.js default `load` hook after the last user-supplied `load` hook
   * `url` {string}
@@ -1406,11 +1421,19 @@ changes:
 
 * `specifier` {string}
 * `context` {Object}
-  * `conditions` {string\[]} Export conditions of the relevant `package.json`
+  * `conditions` {string\[]} Export conditions of the relevant `package.json`.
+    When `requestType` is `'require'`, the array contains CJS conditions
+    (including `'require'`); otherwise it contains ESM conditions
+    (including `'import'`).
   * `importAttributes` {Object} An object whose key-value pairs represent the
     attributes for the module to import
   * `parentURL` {string|undefined} The module importing this one, or undefined
     if this is the Node.js entry point
+  * `requestType` {string} `'import'` if this resolution is on behalf of an
+    `import` statement, `import()` expression, or `import.meta.resolve()`;
+    `'require'` if it is on behalf of a `require()` call (including
+    `require()` in a CommonJS module reached via the [`require(esm)`][]
+    bridge).
 * `nextResolve` {Function} The subsequent `resolve` hook in the chain, or the
   Node.js default `resolve` hook after the last user-supplied `resolve` hook
   * `specifier` {string}
@@ -1438,10 +1461,6 @@ The asynchronous version works similarly to the synchronous version, only that t
 > customized by asynchronous hooks does not receive the original specifier passed to
 > `require()`. Instead, it receives a URL already fully resolved using the default
 > CommonJS resolution.
-
-> **Warning** In the CommonJS modules that are customized by the asynchronous customization hooks,
-> `require.resolve()` and `require()` will use `"import"` export condition instead of
-> `"require"`, which may cause unexpected behaviors when loading dual packages.
 
 ```mjs
 export async function resolve(specifier, context, nextResolve) {
@@ -1491,11 +1510,18 @@ changes:
 
 * `url` {string} The URL returned by the `resolve` chain
 * `context` {Object}
-  * `conditions` {string\[]} Export conditions of the relevant `package.json`
+  * `conditions` {string\[]} Export conditions of the relevant `package.json`.
+    When `requestType` is `'require'`, the array contains CJS conditions
+    (including `'require'`); otherwise it contains ESM conditions
+    (including `'import'`).
   * `format` {string|null|undefined} The format optionally supplied by the
     `resolve` hook chain. This can be any string value as an input; input values do not need to
     conform to the list of acceptable return values described below.
   * `importAttributes` {Object}
+  * `requestType` {string} `'import'` if this load is on behalf of an `import`
+    statement or `import()` expression; `'require'` if it is on behalf of a
+    `require()` call (including `require()` in a CommonJS module reached via
+    the [`require(esm)`][] bridge).
 * `nextLoad` {Function} The subsequent `load` hook in the chain, or the
   Node.js default `load` hook after the last user-supplied `load` hook
   * `url` {string}
@@ -2072,6 +2098,7 @@ returned object contains the following keys:
 [`module`]: #the-module-object
 [`os.tmpdir()`]: os.md#ostmpdir
 [`register`]: #moduleregisterspecifier-parenturl-options
+[`require(esm)`]: modules.md#loading-ecmascript-modules-using-require
 [`util.TextDecoder`]: util.md#class-utiltextdecoder
 [accepted final formats]: #accepted-final-formats-returned-by-load
 [asynchronous `load` hook]: #asynchronous-loadurl-context-nextload
