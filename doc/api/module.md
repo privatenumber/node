@@ -220,6 +220,12 @@ changes:
 Register a module that exports [hooks][] that customize Node.js module
 resolution and loading behavior. See [Customization hooks][].
 
+This API is runtime-deprecated. New code should use
+[`module.registerHooks()`][] instead, which runs hooks synchronously on the
+main thread and avoids the worker-thread caveats listed under
+[caveats of asynchronous customization hooks][]. Hook context fields are
+kept in sync across both APIs to ease migration.
+
 This feature requires `--allow-worker` if used with the [Permission Model][].
 
 ### `module.registerHooks(options)`
@@ -873,6 +879,11 @@ via `process.execArgv` inheritance. See [the documentation of `Worker`][] for de
 
 <!-- YAML
 changes:
+  - version: REPLACEME
+    pr-url: https://github.com/nodejs/node/pull/REPLACEME
+    description: Add `context.requestType` so hooks can distinguish a `require()`
+                 call from an `import`. `context.conditions` now reflects the
+                 request type (CJS conditions when `requestType` is `'require'`).
   - version:
     - v23.5.0
     - v22.15.0
@@ -969,6 +980,11 @@ registerHooks({ resolve });
 
 <!-- YAML
 changes:
+  - version: REPLACEME
+    pr-url: https://github.com/nodejs/node/pull/REPLACEME
+    description: Add `context.requestType` so hooks can distinguish a `require()`
+                 call from an `import`. `context.conditions` now reflects the
+                 request type (CJS conditions when `requestType` is `'require'`).
   - version:
     - v23.5.0
     - v22.15.0
@@ -1397,6 +1413,11 @@ register('./path-to-my-hooks.js', {
 
 <!-- YAML
 changes:
+  - version: REPLACEME
+    pr-url: https://github.com/nodejs/node/pull/REPLACEME
+    description: Add `context.requestType` so hooks can distinguish a `require()`
+                 call from an `import`. `context.conditions` now reflects the
+                 request type (CJS conditions when `requestType` is `'require'`).
   - version:
     - v21.0.0
     - v20.10.0
@@ -1493,6 +1514,12 @@ export async function resolve(specifier, context, nextResolve) {
 
 <!-- YAML
 changes:
+  - version: REPLACEME
+    pr-url: https://github.com/nodejs/node/pull/REPLACEME
+    description: Add `context.requestType` so hooks can distinguish a `require()`
+                 call from an `import`. `context.conditions` is now populated on
+                 the load context as well (it was previously absent), and
+                 reflects the request type.
   - version: v22.6.0
     pr-url: https://github.com/nodejs/node/pull/56350
     description: Add support for `source` with format `commonjs-typescript` and `module-typescript`.

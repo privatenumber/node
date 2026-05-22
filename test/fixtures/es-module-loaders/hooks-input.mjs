@@ -80,8 +80,8 @@ export async function load(url, context, next) {
   assert.deepStrictEqual(Reflect.ownKeys(context), [
     'format',
     'importAttributes',
-    'requestType',
     'conditions',
+    'requestType',
     'importAssertions',
   ]);
   assert.strictEqual(context.format, 'test');

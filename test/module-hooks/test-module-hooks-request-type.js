@@ -2,16 +2,24 @@
 'use strict';
 
 // Test that synchronous module hooks (module.registerHooks) receive
-// context.requestType ('import' or 'require') in both resolve and load hooks,
+// context.requestType ('import' or 'require') in resolve and load hooks,
 // and that context.conditions is the correct set for the request type
-// (CJS conditions for require, ESM conditions for import).
+// (CJS conditions when requestType is 'require', ESM defaults otherwise).
+//
+// Covers the request-type matrix produced by the require-esm fixture, which
+// interleaves require() and import in both directions:
+//   - main.cjs                 : required at top-level                      -> 'require'
+//   - main.cjs requires esm.mjs: require(esm) bridge                        -> 'require'
+//   - esm.mjs imports inner.mjs: import inside require()'d ESM
+//                                (kImportInRequiredESM)                     -> 'import'
+//   - esm.mjs imports cjs.cjs  : import inside require()'d ESM of a CJS     -> 'import'
+//   - cjs.cjs requires inner.cjs: require() inside CJS reached via import   -> 'require'
 //
 // Refs: https://github.com/nodejs/node/issues/51327
 
 const common = require('../common');
 const assert = require('node:assert');
 const { registerHooks } = require('node:module');
-const { pathToFileURL } = require('node:url');
 const fixtures = require('../common/fixtures');
 
 const records = [];
@@ -30,20 +38,22 @@ const hook = registerHooks({
     records.push({
       kind: 'load',
       url,
+      format: context.format,
       requestType: context.requestType,
       conditions: context.conditions,
-      format: context.format,
     });
     return nextLoad(url, context);
   },
 });
 
-function findRecord(predicate) {
-  return records.find(predicate);
+function findLoadRecord(suffix) {
+  return records.find((r) => r.kind === 'load' && r.url.endsWith(suffix));
 }
 
 function assertRequireContext(record, label) {
-  assert.strictEqual(record.requestType, 'require');
+  assert.ok(record, `expected a record for ${label}`);
+  assert.strictEqual(record.requestType, 'require',
+                     `${label}: requestType`);
   assert.ok(Array.isArray(record.conditions),
             `${label}: conditions should be an array`);
   assert.ok(record.conditions.includes('require'),
@@ -53,7 +63,9 @@ function assertRequireContext(record, label) {
 }
 
 function assertImportContext(record, label) {
-  assert.strictEqual(record.requestType, 'import');
+  assert.ok(record, `expected a record for ${label}`);
+  assert.strictEqual(record.requestType, 'import',
+                     `${label}: requestType`);
   assert.ok(Array.isArray(record.conditions),
             `${label}: conditions should be an array`);
   assert.ok(record.conditions.includes('import'),
@@ -62,43 +74,84 @@ function assertImportContext(record, label) {
             `${label}: conditions should not include 'require', got ${JSON.stringify(record.conditions)}`);
 }
 
-// 1. require() of a CJS file -> requestType: 'require'.
-require(fixtures.path('module-hooks', 'require-esm', 'inner.cjs'));
+// Trigger the full interleaving in one require chain.
+require(fixtures.path('module-hooks', 'require-esm', 'main.cjs'));
 
-const cjsRequireLoad = findRecord((r) =>
-  r.kind === 'load' && r.url.endsWith('require-esm/inner.cjs'));
-assert.ok(cjsRequireLoad, 'expected load record for inner.cjs');
-assertRequireContext(cjsRequireLoad, 'require(inner.cjs) load');
+// 1. main.cjs is required at top level -> 'require'.
+assertRequireContext(findLoadRecord('require-esm/main.cjs'),
+                     'require(main.cjs) load');
 
-const cjsRequireResolve = findRecord((r) =>
-  r.kind === 'resolve' && typeof r.specifier === 'string' && r.specifier.endsWith('inner.cjs'));
-assert.ok(cjsRequireResolve, 'expected resolve record for inner.cjs');
-assertRequireContext(cjsRequireResolve, 'require(inner.cjs) resolve');
+// 2. main.cjs does require('./esm.mjs') -> 'require' (require(esm) bridge).
+assertRequireContext(findLoadRecord('require-esm/esm.mjs'),
+                     'require(esm.mjs) load (bridge)');
 
-// 2. require(esm) bridge of an ESM file -> requestType: 'require'.
-//    This is the require() in CJS of an ESM module. The hook sees the ESM file
-//    being loaded but the requestType reflects that the load is for a require().
-require(fixtures.path('module-hooks', 'require-esm', 'inner.mjs'));
+// 3. esm.mjs does `import { esmValue } from './inner.mjs'` -> 'import'.
+//    This is the kImportInRequiredESM case: an import statement inside an ESM
+//    module that was reached via require(). Semantically still an import.
+assertImportContext(findLoadRecord('require-esm/inner.mjs'),
+                    'import-in-required-esm of inner.mjs load');
 
-const esmRequireLoad = findRecord((r) =>
-  r.kind === 'load' && r.url.endsWith('require-esm/inner.mjs'));
-assert.ok(esmRequireLoad, 'expected load record for require(inner.mjs)');
-assertRequireContext(esmRequireLoad, 'require(inner.mjs) load (bridge)');
+// 4. esm.mjs does `import { cjsValue } from './cjs.cjs'` -> 'import'.
+//    Still an import statement, even though the target happens to be CJS.
+assertImportContext(findLoadRecord('require-esm/cjs.cjs'),
+                    'import-in-required-esm of cjs.cjs load');
 
-// 3. import() of an ESM file -> requestType: 'import'.
-//    Use a fixture path that hasn't been required yet so we avoid the load cache.
+// 5. cjs.cjs does require('./inner.cjs') -> 'require'.
+//    Even though cjs.cjs was reached via an import statement, its internal
+//    require() call still has require() semantics.
+assertRequireContext(findLoadRecord('require-esm/inner.cjs'),
+                     'require(inner.cjs) inside cjs.cjs load');
+
+// Sanity check the resolve hook also saw the same requestType for each load.
+function findResolveRecord(suffix) {
+  return records.find((r) =>
+    r.kind === 'resolve' &&
+    typeof r.specifier === 'string' &&
+    r.specifier.endsWith(suffix));
+}
+
+assertRequireContext(findResolveRecord('esm.mjs'), 'resolve esm.mjs');
+assertImportContext(findResolveRecord('inner.mjs'), 'resolve inner.mjs');
+assertImportContext(findResolveRecord('cjs.cjs'), 'resolve cjs.cjs');
+assertRequireContext(findResolveRecord('inner.cjs'), 'resolve inner.cjs');
+
+hook.deregister();
+
+// Also test dynamic import() in an async block. Use a separate fixture path
+// to avoid the module cache from the require chain above.
 (async () => {
-  await import(pathToFileURL(fixtures.path('module-hooks', 'empty.mjs')).href);
+  const records2 = [];
+  const dynHook = registerHooks({
+    resolve(specifier, context, nextResolve) {
+      records2.push({
+        kind: 'resolve',
+        specifier,
+        requestType: context.requestType,
+        conditions: context.conditions,
+      });
+      return nextResolve(specifier, context);
+    },
+    load(url, context, nextLoad) {
+      records2.push({
+        kind: 'load',
+        url,
+        requestType: context.requestType,
+        conditions: context.conditions,
+      });
+      return nextLoad(url, context);
+    },
+  });
 
-  const esmImportLoad = findRecord((r) =>
+  await import(fixtures.fileURL('module-hooks', 'empty.mjs').href);
+
+  const importLoad = records2.find((r) =>
     r.kind === 'load' && r.url.endsWith('module-hooks/empty.mjs'));
-  assert.ok(esmImportLoad, 'expected load record for import(empty.mjs)');
-  assertImportContext(esmImportLoad, 'import(empty.mjs) load');
+  assertImportContext(importLoad, 'dynamic import(empty.mjs) load');
 
-  const esmImportResolve = findRecord((r) =>
-    r.kind === 'resolve' && typeof r.specifier === 'string' && r.specifier.endsWith('module-hooks/empty.mjs'));
-  assert.ok(esmImportResolve, 'expected resolve record for import(empty.mjs)');
-  assertImportContext(esmImportResolve, 'import(empty.mjs) resolve');
+  const importResolve = records2.find((r) =>
+    r.kind === 'resolve' && typeof r.specifier === 'string' &&
+    r.specifier.endsWith('module-hooks/empty.mjs'));
+  assertImportContext(importResolve, 'dynamic import(empty.mjs) resolve');
 
-  hook.deregister();
+  dynHook.deregister();
 })().then(common.mustCall());
