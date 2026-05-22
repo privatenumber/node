@@ -220,6 +220,12 @@ changes:
 Register a module that exports [hooks][] that customize Node.js module
 resolution and loading behavior. See [Customization hooks][].
 
+This API is runtime-deprecated. New code should use
+[`module.registerHooks()`][] instead, which runs hooks synchronously on the
+main thread and avoids the worker-thread caveats listed under
+[caveats of asynchronous customization hooks][]. Hook context fields are
+kept in sync across both APIs to ease migration.
+
 This feature requires `--allow-worker` if used with the [Permission Model][].
 
 ### `module.registerHooks(options)`
@@ -873,6 +879,11 @@ via `process.execArgv` inheritance. See [the documentation of `Worker`][] for de
 
 <!-- YAML
 changes:
+  - version: REPLACEME
+    pr-url: https://github.com/nodejs/node/pull/REPLACEME
+    description: Add `context.requestType` so hooks can distinguish a `require()`
+                 call from an `import`. `context.conditions` now reflects the
+                 request type (CJS conditions when `requestType` is `'require'`).
   - version:
     - v23.5.0
     - v22.15.0
@@ -882,11 +893,19 @@ changes:
 
 * `specifier` {string}
 * `context` {Object}
-  * `conditions` {string\[]} Export conditions of the relevant `package.json`
+  * `conditions` {string\[]} Export conditions of the relevant `package.json`.
+    When `requestType` is `'require'`, the array contains CJS conditions
+    (including `'require'`); otherwise it contains ESM conditions
+    (including `'import'`).
   * `importAttributes` {Object} An object whose key-value pairs represent the
     attributes for the module to import
   * `parentURL` {string|undefined} The module importing this one, or undefined
     if this is the Node.js entry point
+  * `requestType` {string} `'import'` if this resolution is on behalf of an
+    `import` statement, `import()` expression, or `import.meta.resolve()`;
+    `'require'` if it is on behalf of a `require()` call (including
+    `require()` in a CommonJS module reached via the [`require(esm)`][]
+    bridge).
 * `nextResolve` {Function} The subsequent `resolve` hook in the chain, or the
   Node.js default `resolve` hook after the last user-supplied `resolve` hook
   * `specifier` {string}
@@ -961,6 +980,11 @@ registerHooks({ resolve });
 
 <!-- YAML
 changes:
+  - version: REPLACEME
+    pr-url: https://github.com/nodejs/node/pull/REPLACEME
+    description: Add `context.requestType` so hooks can distinguish a `require()`
+                 call from an `import`. `context.conditions` now reflects the
+                 request type (CJS conditions when `requestType` is `'require'`).
   - version:
     - v23.5.0
     - v22.15.0
@@ -970,11 +994,18 @@ changes:
 
 * `url` {string} The URL returned by the `resolve` chain
 * `context` {Object}
-  * `conditions` {string\[]} Export conditions of the relevant `package.json`
+  * `conditions` {string\[]} Export conditions of the relevant `package.json`.
+    When `requestType` is `'require'`, the array contains CJS conditions
+    (including `'require'`); otherwise it contains ESM conditions
+    (including `'import'`).
   * `format` {string|null|undefined} The format optionally supplied by the
     `resolve` hook chain. This can be any string value as an input; input values do not need to
     conform to the list of acceptable return values described below.
   * `importAttributes` {Object}
+  * `requestType` {string} `'import'` if this load is on behalf of an `import`
+    statement or `import()` expression; `'require'` if it is on behalf of a
+    `require()` call (including `require()` in a CommonJS module reached via
+    the [`require(esm)`][] bridge).
 * `nextLoad` {Function} The subsequent `load` hook in the chain, or the
   Node.js default `load` hook after the last user-supplied `load` hook
   * `url` {string}
@@ -1382,6 +1413,11 @@ register('./path-to-my-hooks.js', {
 
 <!-- YAML
 changes:
+  - version: REPLACEME
+    pr-url: https://github.com/nodejs/node/pull/REPLACEME
+    description: Add `context.requestType` so hooks can distinguish a `require()`
+                 call from an `import`. `context.conditions` now reflects the
+                 request type (CJS conditions when `requestType` is `'require'`).
   - version:
     - v21.0.0
     - v20.10.0
@@ -1406,11 +1442,19 @@ changes:
 
 * `specifier` {string}
 * `context` {Object}
-  * `conditions` {string\[]} Export conditions of the relevant `package.json`
+  * `conditions` {string\[]} Export conditions of the relevant `package.json`.
+    When `requestType` is `'require'`, the array contains CJS conditions
+    (including `'require'`); otherwise it contains ESM conditions
+    (including `'import'`).
   * `importAttributes` {Object} An object whose key-value pairs represent the
     attributes for the module to import
   * `parentURL` {string|undefined} The module importing this one, or undefined
     if this is the Node.js entry point
+  * `requestType` {string} `'import'` if this resolution is on behalf of an
+    `import` statement, `import()` expression, or `import.meta.resolve()`;
+    `'require'` if it is on behalf of a `require()` call (including
+    `require()` in a CommonJS module reached via the [`require(esm)`][]
+    bridge).
 * `nextResolve` {Function} The subsequent `resolve` hook in the chain, or the
   Node.js default `resolve` hook after the last user-supplied `resolve` hook
   * `specifier` {string}
@@ -1438,10 +1482,6 @@ The asynchronous version works similarly to the synchronous version, only that t
 > customized by asynchronous hooks does not receive the original specifier passed to
 > `require()`. Instead, it receives a URL already fully resolved using the default
 > CommonJS resolution.
-
-> **Warning** In the CommonJS modules that are customized by the asynchronous customization hooks,
-> `require.resolve()` and `require()` will use `"import"` export condition instead of
-> `"require"`, which may cause unexpected behaviors when loading dual packages.
 
 ```mjs
 export async function resolve(specifier, context, nextResolve) {
@@ -1474,6 +1514,12 @@ export async function resolve(specifier, context, nextResolve) {
 
 <!-- YAML
 changes:
+  - version: REPLACEME
+    pr-url: https://github.com/nodejs/node/pull/REPLACEME
+    description: Add `context.requestType` so hooks can distinguish a `require()`
+                 call from an `import`. `context.conditions` is now populated on
+                 the load context as well (it was previously absent), and
+                 reflects the request type.
   - version: v22.6.0
     pr-url: https://github.com/nodejs/node/pull/56350
     description: Add support for `source` with format `commonjs-typescript` and `module-typescript`.
@@ -1491,11 +1537,18 @@ changes:
 
 * `url` {string} The URL returned by the `resolve` chain
 * `context` {Object}
-  * `conditions` {string\[]} Export conditions of the relevant `package.json`
+  * `conditions` {string\[]} Export conditions of the relevant `package.json`.
+    When `requestType` is `'require'`, the array contains CJS conditions
+    (including `'require'`); otherwise it contains ESM conditions
+    (including `'import'`).
   * `format` {string|null|undefined} The format optionally supplied by the
     `resolve` hook chain. This can be any string value as an input; input values do not need to
     conform to the list of acceptable return values described below.
   * `importAttributes` {Object}
+  * `requestType` {string} `'import'` if this load is on behalf of an `import`
+    statement or `import()` expression; `'require'` if it is on behalf of a
+    `require()` call (including `require()` in a CommonJS module reached via
+    the [`require(esm)`][] bridge).
 * `nextLoad` {Function} The subsequent `load` hook in the chain, or the
   Node.js default `load` hook after the last user-supplied `load` hook
   * `url` {string}
@@ -2072,6 +2125,7 @@ returned object contains the following keys:
 [`module`]: #the-module-object
 [`os.tmpdir()`]: os.md#ostmpdir
 [`register`]: #moduleregisterspecifier-parenturl-options
+[`require(esm)`]: modules.md#loading-ecmascript-modules-using-require
 [`util.TextDecoder`]: util.md#class-utiltextdecoder
 [accepted final formats]: #accepted-final-formats-returned-by-load
 [asynchronous `load` hook]: #asynchronous-loadurl-context-nextload
